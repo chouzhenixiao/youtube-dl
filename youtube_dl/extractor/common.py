@@ -15,6 +15,7 @@ import xml.etree.ElementTree
 from ..compat import (
     compat_cookiejar,
     compat_cookies,
+    compat_getpass,
     compat_HTTPError,
     compat_http_client,
     compat_urllib_error,
@@ -610,7 +611,7 @@ class InfoExtractor(object):
 
         return (username, password)
 
-    def _get_tfa_info(self):
+    def _get_tfa_info(self, note='two-factor verification code'):
         """
         Get the two-factor authentication info
         TODO - asking the user will be required for sms/phone verify
@@ -624,7 +625,7 @@ class InfoExtractor(object):
         if downloader_params.get('twofactor', None) is not None:
             return downloader_params['twofactor']
 
-        return None
+        return compat_getpass('Type %s and press [Return]: ' % note)
 
     # Helper functions for extracting OpenGraph info
     @staticmethod
@@ -724,16 +725,18 @@ class InfoExtractor(object):
 
     @staticmethod
     def _hidden_inputs(html):
-        return dict([
-            (input.group('name'), input.group('value')) for input in re.finditer(
-                r'''(?x)
-                    <input\s+
-                        type=(?P<q_hidden>["\'])hidden(?P=q_hidden)\s+
-                        name=(?P<q_name>["\'])(?P<name>.+?)(?P=q_name)\s+
-                        (?:id=(?P<q_id>["\']).+?(?P=q_id)\s+)?
-                        value=(?P<q_value>["\'])(?P<value>.*?)(?P=q_value)
-                ''', html)
-        ])
+        hidden_inputs = {}
+        for input in re.findall(r'<input([^>]+)>', html):
+            if not re.search(r'type=(["\'])hidden\1', input):
+                continue
+            name = re.search(r'name=(["\'])(?P<value>.+?)\1', input)
+            if not name:
+                continue
+            value = re.search(r'value=(["\'])(?P<value>.*?)\1', input)
+            if not value:
+                continue
+            hidden_inputs[name.group('value')] = value.group('value')
+        return hidden_inputs
 
     def _form_hidden_inputs(self, form_id, html):
         form = self._search_regex(
