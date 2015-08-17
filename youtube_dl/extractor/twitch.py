@@ -15,6 +15,7 @@ from ..compat import (
 )
 from ..utils import (
     ExtractorError,
+    int_or_none,
     parse_duration,
     parse_iso8601,
 )
@@ -132,14 +133,14 @@ class TwitchItemBaseIE(TwitchBaseIE):
     def _extract_info(self, info):
         return {
             'id': info['_id'],
-            'title': info['title'],
-            'description': info['description'],
-            'duration': info['length'],
-            'thumbnail': info['preview'],
-            'uploader': info['channel']['display_name'],
-            'uploader_id': info['channel']['name'],
-            'timestamp': parse_iso8601(info['recorded_at']),
-            'view_count': info['views'],
+            'title': info.get('title') or 'Untitled Broadcast',
+            'description': info.get('description'),
+            'duration': int_or_none(info.get('length')),
+            'thumbnail': info.get('preview'),
+            'uploader': info.get('channel', {}).get('display_name'),
+            'uploader_id': info.get('channel', {}).get('name'),
+            'timestamp': parse_iso8601(info.get('recorded_at')),
+            'view_count': int_or_none(info.get('views')),
         }
 
     def _real_extract(self, url):
@@ -187,7 +188,7 @@ class TwitchVodIE(TwitchItemBaseIE):
     _ITEM_TYPE = 'vod'
     _ITEM_SHORTCUT = 'v'
 
-    _TEST = {
+    _TESTS = [{
         'url': 'http://www.twitch.tv/riotgames/v/6528877?t=5m10s',
         'info_dict': {
             'id': 'v6528877',
@@ -206,7 +207,26 @@ class TwitchVodIE(TwitchItemBaseIE):
             # m3u8 download
             'skip_download': True,
         },
-    }
+    }, {
+        # Untitled broadcast (title is None)
+        'url': 'http://www.twitch.tv/belkao_o/v/11230755',
+        'info_dict': {
+            'id': 'v11230755',
+            'ext': 'mp4',
+            'title': 'Untitled Broadcast',
+            'thumbnail': 're:^https?://.*\.jpg$',
+            'duration': 1638,
+            'timestamp': 1439746708,
+            'upload_date': '20150816',
+            'uploader': 'BelkAO_o',
+            'uploader_id': 'belkao_o',
+            'view_count': int,
+        },
+        'params': {
+            # m3u8 download
+            'skip_download': True,
+        },
+    }]
 
     def _real_extract(self, url):
         item_id = self._match_id(url)
