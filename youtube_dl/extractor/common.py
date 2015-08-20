@@ -1052,7 +1052,7 @@ class InfoExtractor(object):
         return self._search_regex(
             r'(?i)^{([^}]+)?}smil$', smil.tag, 'namespace', default=None)
 
-    def _parse_smil_formats(self, smil, smil_url, video_id, namespace=None, f4m_params=None):
+    def _parse_smil_formats(self, smil, smil_url, video_id, namespace=None, f4m_params=None, transform_rtmp_url=None):
         base = smil_url
         for meta in smil.findall(self._xpath_ns('./head/meta', namespace)):
             b = meta.get('base') or meta.get('httpBase')
@@ -1091,6 +1091,12 @@ class InfoExtractor(object):
                     'width': width,
                     'height': height,
                 })
+                if transform_rtmp_url:
+                    streamer, src = transform_rtmp_url(streamer, src)
+                    formats[-1].update({
+                        'url': streamer,
+                        'play_path': src,
+                    })
                 continue
 
             src_url = src if src.startswith('http') else compat_urlparse.urljoin(base, src)
@@ -1129,7 +1135,7 @@ class InfoExtractor(object):
 
         return formats
 
-    def _parse_smil_subtitles(self, smil, namespace=None):
+    def _parse_smil_subtitles(self, smil, namespace=None, subtitles_lang='en'):
         subtitles = {}
         for num, textstream in enumerate(smil.findall(self._xpath_ns('.//textstream', namespace))):
             src = textstream.get('src')
@@ -1138,9 +1144,14 @@ class InfoExtractor(object):
             ext = textstream.get('ext') or determine_ext(src)
             if not ext:
                 type_ = textstream.get('type')
-                if type_ == 'text/srt':
-                    ext = 'srt'
-            lang = textstream.get('systemLanguage') or textstream.get('systemLanguageName')
+                SUBTITLES_TYPES = {
+                    'text/vtt': 'vtt',
+                    'text/srt': 'srt',
+                    'application/smptett+xml': 'tt',
+                }
+                if type_ in SUBTITLES_TYPES:
+                    ext = SUBTITLES_TYPES[type_]
+            lang = textstream.get('systemLanguage') or textstream.get('systemLanguageName') or subtitles_lang
             subtitles.setdefault(lang, []).append({
                 'url': src,
                 'ext': ext,
