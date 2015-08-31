@@ -1243,7 +1243,7 @@ class YoutubeIE(YoutubeBaseInfoExtractor):
             encoded_url_map = video_info.get('url_encoded_fmt_stream_map', [''])[0] + ',' + video_info.get('adaptive_fmts', [''])[0]
             if 'rtmpe%3Dyes' in encoded_url_map:
                 raise ExtractorError('rtmpe downloads are not supported, see https://github.com/rg3/youtube-dl/issues/343 for more information.', expected=True)
-            url_map = {}
+            formats = []
             for url_data_str in encoded_url_map.split(','):
                 url_data = compat_parse_qs(url_data_str)
                 if 'itag' not in url_data or 'url' not in url_data:
@@ -1303,8 +1303,50 @@ class YoutubeIE(YoutubeBaseInfoExtractor):
                     url += '&signature=' + signature
                 if 'ratebypass' not in url:
                     url += '&ratebypass=yes'
-                url_map[format_id] = url
-            formats = _map_to_format_list(url_map)
+
+                # Some itags are not included in DASH manifest thus corresponding formats will
+                # lack metadata (see https://github.com/rg3/youtube-dl/pull/5993).
+                # Trying to extract metadata from url_encoded_fmt_stream_map entry.
+                mobj = re.search(r'^(?P<width>\d+)[xX](?P<height>\d+)$', url_data.get('size', [''])[0])
+                width, height = (int(mobj.group('width')), int(mobj.group('height'))) if mobj else (None, None)
+                dct = {
+                    'format_id': format_id,
+                    'url': url,
+                    'player_url': player_url,
+                    'filesize': int_or_none(url_data.get('clen', [None])[0]),
+                    'tbr': float_or_none(url_data.get('bitrate', [None])[0], 1000),
+                    'width': width,
+                    'height': height,
+                    'fps': int_or_none(url_data.get('fps', [None])[0]),
+                    'format_note': url_data.get('quality_label', [None])[0] or url_data.get('quality', [None])[0],
+                }
+                type_ = url_data.get('type', [None])[0]
+                if type_:
+                    type_split = type_.split(';')
+                    kind_ext = type_split[0].split('/')
+                    if len(kind_ext) == 2:
+                        kind, ext = kind_ext
+                        dct['ext'] = ext
+                        if kind in ('audio', 'video'):
+                            codecs = None
+                            for mobj in re.finditer(
+                                    r'(?P<key>[a-zA-Z_-]+)=(?P<quote>["\']?)(?P<val>.+?)(?P=quote)(?:;|$)', type_):
+                                if mobj.group('key') == 'codecs':
+                                    codecs = mobj.group('val')
+                                    break
+                            if codecs:
+                                codecs = codecs.split(',')
+                                if len(codecs) == 2:
+                                    acodec, vcodec = codecs[0], codecs[1]
+                                else:
+                                    acodec, vcodec = (codecs[0], 'none') if kind == 'audio' else ('none', codecs[0])
+                                dct.update({
+                                    'acodec': acodec,
+                                    'vcodec': vcodec,
+                                })
+                if format_id in self._formats:
+                    dct.update(self._formats[format_id])
+                formats.append(dct)
         elif video_info.get('hlsvp'):
             manifest_url = video_info['hlsvp'][0]
             url_map = self._extract_from_m3u8(manifest_url, video_id)

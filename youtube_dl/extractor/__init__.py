@@ -241,7 +241,10 @@ from .imdb import (
     ImdbIE,
     ImdbListIE
 )
-from .imgur import ImgurIE
+from .imgur import (
+    ImgurIE,
+    ImgurAlbumIE,
+)
 from .ina import InaIE
 from .indavideo import (
     IndavideoIE,
@@ -340,6 +343,7 @@ from .mtv import (
     MTVIE,
     MTVServicesEmbeddedIE,
     MTVIggyIE,
+    MTVDEIE,
 )
 from .muenchentv import MuenchenTVIE
 from .musicplayon import MusicPlayOnIE
