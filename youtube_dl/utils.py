@@ -141,7 +141,7 @@ def write_json_file(obj, fn):
 if sys.version_info >= (2, 7):
     def find_xpath_attr(node, xpath, key, val=None):
         """ Find the xpath xpath[@key=val] """
-        assert re.match(r'^[a-zA-Z-]+$', key)
+        assert re.match(r'^[a-zA-Z_-]+$', key)
         if val:
             assert re.match(r'^[a-zA-Z0-9@\s:._-]*$', val)
         expr = xpath + ('[@%s]' % key if val is None else "[@%s='%s']" % (key, val))
@@ -176,12 +176,12 @@ def xpath_with_ns(path, ns_map):
     return '/'.join(replaced)
 
 
-def xpath_text(node, xpath, name=None, fatal=False, default=NO_DEFAULT):
+def xpath_element(node, xpath, name=None, fatal=False, default=NO_DEFAULT):
     if sys.version_info < (2, 7):  # Crazy 2.6
         xpath = xpath.encode('ascii')
 
     n = node.find(xpath)
-    if n is None or n.text is None:
+    if n is None:
         if default is not NO_DEFAULT:
             return default
         elif fatal:
@@ -189,7 +189,35 @@ def xpath_text(node, xpath, name=None, fatal=False, default=NO_DEFAULT):
             raise ExtractorError('Could not find XML element %s' % name)
         else:
             return None
+    return n
+
+
+def xpath_text(node, xpath, name=None, fatal=False, default=NO_DEFAULT):
+    n = xpath_element(node, xpath, name, fatal=fatal, default=default)
+    if n is None or n == default:
+        return n
+    if n.text is None:
+        if default is not NO_DEFAULT:
+            return default
+        elif fatal:
+            name = xpath if name is None else name
+            raise ExtractorError('Could not find XML element\'s text %s' % name)
+        else:
+            return None
     return n.text
+
+
+def xpath_attr(node, xpath, key, name=None, fatal=False, default=NO_DEFAULT):
+    n = find_xpath_attr(node, xpath, key)
+    if n is None:
+        if default is not NO_DEFAULT:
+            return default
+        elif fatal:
+            name = '%s[@%s]' % (xpath, key) if name is None else name
+            raise ExtractorError('Could not find XML attribute %s' % name)
+        else:
+            return None
+    return n.attrib[key]
 
 
 def get_element_by_id(id, html):
@@ -1921,6 +1949,32 @@ def dfxp2srt(dfxp_data):
             parse_node(para)))
 
     return ''.join(out)
+
+
+def cli_option(params, command_option, param):
+    param = params.get(param)
+    return [command_option, param] if param is not None else []
+
+
+def cli_bool_option(params, command_option, param, true_value='true', false_value='false', separator=None):
+    param = params.get(param)
+    assert isinstance(param, bool)
+    if separator:
+        return [command_option + separator + (true_value if param else false_value)]
+    return [command_option, true_value if param else false_value]
+
+
+def cli_valueless_option(params, command_option, param, expected_value=True):
+    param = params.get(param)
+    return [command_option] if param == expected_value else []
+
+
+def cli_configuration_args(params, param, default=[]):
+    ex_args = params.get(param)
+    if ex_args is None:
+        return default
+    assert isinstance(ex_args, list)
+    return ex_args
 
 
 class ISO639Utils(object):
